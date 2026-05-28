@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import {
   addItemToPreset, addCassetteToPreset,
-  removeItemFromPreset, updateItemInPreset, reorderItemInPreset
+  removeItemFromPreset, updateItemInPreset, reorderItemInPreset,
+  deletePreset
 } from '../services/presetService';
 
 export default function PresetDetailModal({ preset, allItems, cassettes, presetsByGroup, say, refresh, onClose }) {
@@ -21,6 +22,12 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
   const filterCassettes = () =>
     cassettes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
+  const [expandedCassettes, setExpandedCassettes] = useState({});
+
+  const toggleCassette = (cassetteId) => {
+    setExpandedCassettes(prev => ({ ...prev, [cassetteId]: !prev[cassetteId] }));
+  };
+
   // Separate preset items into cassettes and regular items
   const cassetteItems = presetItems.filter(it => it.type === 'cassette');
   const regularItems = presetItems.filter(it => it.type !== 'cassette');
@@ -37,41 +44,81 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Setup List: {preset.name}</h3>
-          <button onClick={onClose}>Close</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={async () => {
+              if (!confirm(`Delete setup list "${preset.name}"? This cannot be undone.`)) return;
+              await deletePreset(preset.groupId, preset.presetId);
+              say(`Deleted setup list: ${preset.name}`);
+              refresh();
+              onClose();
+            }} style={{ color: 'red', fontSize: 12 }}>Delete List</button>
+            <button onClick={onClose}>Close</button>
+          </div>
         </div>
 
         {/* Cassettes in preset */}
-        {cassetteItems.length > 0 && (
-          <div style={{ marginTop: 15 }}>
-            <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
-              Cassettes ({cassetteItems.length})
-            </div>
-            {cassetteItems.map((it, idx) => {
-              const realIdx = presetItems.indexOf(it);
-              const cassette = cassettes.find(c => c.id === it.cassetteId);
-              return (
-                <div key={idx} style={{
+        <div style={{ marginTop: 15 }}>
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
+            Cassettes ({cassetteItems.length})
+          </div>
+          {cassetteItems.length === 0 && (
+            <p style={{ color: '#aaa', fontSize: 13, margin: '4px 0' }}>No cassettes. Use the <strong>Cassettes</strong> tab below to add one.</p>
+          )}
+          {cassetteItems.map((it, idx) => {
+            const realIdx = presetItems.indexOf(it);
+            const cassette = cassettes.find(c => c.id === it.cassetteId);
+            const isExpanded = expandedCassettes[it.cassetteId];
+            const cassetteInstruments = (cassette?.instrumentIds || [])
+              .map(instId => allItems.find(i => i.id === instId))
+              .filter(Boolean);
+            return (
+              <div key={idx} style={{ marginBottom: 4 }}>
+                <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '6px 8px', background: '#f9f9f9',
-                  borderRadius: 4, marginBottom: 4,
-                  borderLeft: `4px solid ${cassette?.color || '#ccc'}`
-                }}>
+                  borderRadius: isExpanded ? '4px 4px 0 0' : 4,
+                  borderLeft: `4px solid ${cassette?.color || '#ccc'}`,
+                  cursor: 'pointer'
+                }} onClick={() => toggleCassette(it.cassetteId)}>
+                  <span style={{
+                    fontSize: 10, transition: 'transform 0.2s',
+                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                    display: 'inline-block'
+                  }}>▶</span>
                   <span style={{ flex: 1, fontWeight: 500 }}>
                     📦 {cassette?.name || '(deleted cassette)'}
                   </span>
                   <span style={{ fontSize: 11, color: '#888' }}>
-                    {cassette?.instrumentIds?.length || 0} instruments
+                    {cassetteInstruments.length} instruments
                   </span>
-                  <button onClick={async () => {
+                  <button onClick={async (e) => {
+                    e.stopPropagation();
                     await removeItemFromPreset(preset.groupId, preset.presetId, realIdx);
                     say('Removed cassette from preset');
                     refresh();
                   }} style={{ fontSize: 11, color: 'red' }}>Remove</button>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {isExpanded && cassetteInstruments.length > 0 && (
+                  <div style={{
+                    background: '#f3f4f6', borderRadius: '0 0 4px 4px',
+                    borderLeft: `4px solid ${cassette?.color || '#ccc'}`,
+                    padding: '4px 0'
+                  }}>
+                    {cassetteInstruments.map((inst, iIdx) => (
+                      <div key={iIdx} style={{
+                        padding: '3px 12px 3px 28px', fontSize: 12,
+                        color: '#555', display: 'flex', alignItems: 'center', gap: 6
+                      }}>
+                        <span style={{ color: '#aaa', fontSize: 10 }}>•</span>
+                        {inst.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Regular items in preset */}
         <div style={{ marginTop: 15 }}>

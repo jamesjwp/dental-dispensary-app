@@ -120,11 +120,34 @@ export default function InventorySection({ items, say, refresh, showArchived, se
           refresh();
         }} style={{ marginLeft: 10 }}>+ Add Test Item</button>
         <button onClick={async () => {
+          if (!confirm('Tag existing items as "Drawer Supplies" and create any missing drawer items?')) return;
+          const { seedDrawerSupplies } = await import('../services/seedService');
+          const result = await seedDrawerSupplies();
+          say(`Drawer: ${result.tagged} tagged, ${result.created} created`);
+          alert(
+            `Tagged ${result.tagged} existing items:\n${result.taggedNames.join('\n') || '(none)'}\n\n` +
+            `Created ${result.created} new items:\n${result.createdNames.join('\n') || '(none)'}`
+          );
+          refresh();
+        }} style={{ marginLeft: 10, background: '#fef3c7' }}>🗄️ Seed Drawer Supplies</button>
+        <button onClick={async () => {
+          if (!confirm('Seed Burs & Polishers? Existing matching items will be tagged; missing ones will be created.')) return;
+          const { seedBursAndPolishers } = await import('../services/seedService');
+          const result = await seedBursAndPolishers();
+          say(`Burs: ${result.tagged} tagged, ${result.created} created`);
+          alert(
+            `Tagged ${result.tagged} existing items:\n${result.taggedNames.join('\n') || '(none)'}\n\n` +
+            `Created ${result.created} new items:\n${result.createdNames.join('\n') || '(none)'}`
+          );
+          refresh();
+        }} style={{ marginLeft: 10, background: '#fef3c7' }}>🦷 Seed Burs & Polishers</button>
+        <button onClick={async () => {
           if (!confirm('Delete ALL inventory items?')) return;
           const n = await deleteAllItems();
           say(`Deleted ${n} items`);
           refresh();
         }} style={{ marginLeft: 10, color: 'red' }}>Delete All</button>
+        
         <label style={{ marginLeft: 15, fontSize: 13 }}>
           <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
           Show archived
