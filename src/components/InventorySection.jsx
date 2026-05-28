@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ItemName from './ItemName';
 import { sectionStyle, cellStyle } from '../styles';
 import { importCSV, addItem, updateItem, deleteItem, deleteAllItems, restoreItem } from '../services/inventoryService';
 
@@ -120,28 +121,6 @@ export default function InventorySection({ items, say, refresh, showArchived, se
           refresh();
         }} style={{ marginLeft: 10 }}>+ Add Test Item</button>
         <button onClick={async () => {
-          if (!confirm('Tag existing items as "Drawer Supplies" and create any missing drawer items?')) return;
-          const { seedDrawerSupplies } = await import('../services/seedService');
-          const result = await seedDrawerSupplies();
-          say(`Drawer: ${result.tagged} tagged, ${result.created} created`);
-          alert(
-            `Tagged ${result.tagged} existing items:\n${result.taggedNames.join('\n') || '(none)'}\n\n` +
-            `Created ${result.created} new items:\n${result.createdNames.join('\n') || '(none)'}`
-          );
-          refresh();
-        }} style={{ marginLeft: 10, background: '#fef3c7' }}>🗄️ Seed Drawer Supplies</button>
-        <button onClick={async () => {
-          if (!confirm('Seed Burs & Polishers? Existing matching items will be tagged; missing ones will be created.')) return;
-          const { seedBursAndPolishers } = await import('../services/seedService');
-          const result = await seedBursAndPolishers();
-          say(`Burs: ${result.tagged} tagged, ${result.created} created`);
-          alert(
-            `Tagged ${result.tagged} existing items:\n${result.taggedNames.join('\n') || '(none)'}\n\n` +
-            `Created ${result.created} new items:\n${result.createdNames.join('\n') || '(none)'}`
-          );
-          refresh();
-        }} style={{ marginLeft: 10, background: '#fef3c7' }}>🦷 Seed Burs & Polishers</button>
-        <button onClick={async () => {
           if (!confirm('Delete ALL inventory items?')) return;
           const n = await deleteAllItems();
           say(`Deleted ${n} items`);
@@ -230,7 +209,7 @@ export default function InventorySection({ items, say, refresh, showArchived, se
             </tr>
           ) : (
             <tr key={i.id} style={i.archived ? { opacity: 0.5 } : {}}>
-              <td style={cellStyle}>{i.name || '(no name)'}</td>
+              <td style={cellStyle}><ItemName name={i.name || '(no name)'} /></td>
               <td style={cellStyle}>{i.category || ''}</td>
               <td style={cellStyle}>{typeBadge(i.type)}</td>
               <td style={cellStyle}>

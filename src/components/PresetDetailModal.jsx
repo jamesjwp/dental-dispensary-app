@@ -1,15 +1,25 @@
 import { useState } from 'react';
+import ItemName from './ItemName';
+import { modalOverlay, modalBox, sectionLabel, rowBtn } from '../styles';
 import {
   addItemToPreset, addCassetteToPreset,
   removeItemFromPreset, updateItemInPreset, reorderItemInPreset,
   deletePreset
 } from '../services/presetService';
 
+// Tag-based item groups rendered as collapsible sections inside Items
+const TAG_GROUPS = [
+  { tag: 'vitals',           label: 'Vitals',          color: '#ef4444' },
+  { tag: 'drawer supplies',  label: 'Drawer Supplies', color: '#8b5cf6' },
+  { tag: 'burs & polishers', label: 'Burs & Polishers', color: '#f59e0b' },
+  { tag: 'x-ray equipment',  label: 'X-ray Equipment', color: '#0ea5e9' },
+];
+
 export default function PresetDetailModal({ preset, allItems, cassettes, presetsByGroup, say, refresh, onClose }) {
   const presetData = (presetsByGroup[preset.groupId] || []).find(p => p.id === preset.presetId);
   const presetItems = presetData?.items || [];
   const [search, setSearch] = useState('');
-  const [addTab, setAddTab] = useState('supplies'); // 'supplies' | 'instruments' | 'cassettes'
+  const [addTab, setAddTab] = useState('supplies');
   const [editingNote, setEditingNote] = useState(null);
   const [noteValue, setNoteValue] = useState('');
 
@@ -23,25 +33,90 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
     cassettes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
   const [expandedCassettes, setExpandedCassettes] = useState({});
+  const [expandedGroups, setExpandedGroups] = useState({});
 
   const toggleCassette = (cassetteId) => {
     setExpandedCassettes(prev => ({ ...prev, [cassetteId]: !prev[cassetteId] }));
   };
 
-  // Separate preset items into cassettes and regular items
+  const toggleGroup = (key) => {
+    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const cassetteItems = presetItems.filter(it => it.type === 'cassette');
   const regularItems = presetItems.filter(it => it.type !== 'cassette');
 
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', zIndex: 100
-    }}>
-      <div style={{
-        background: 'white', color: '#333', padding: 20, borderRadius: 6,
-        maxWidth: 750, width: '95%', maxHeight: '90vh', overflow: 'auto'
+  // Helper: get lowercase tags for a preset item
+  const getItemTags = (it) => {
+    const inv = allItems.find(i => i.id === it.inventoryId);
+    if (!inv) return [];
+    return (inv.tags || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  };
+
+  // Build grouped + ungrouped item lists
+  const getName = (it) => {
+    const inv = allItems.find(i => i.id === it.inventoryId);
+    return (it.customName || inv?.name || '(unknown)').toLowerCase();
+  };
+
+  const groupedItemSets = TAG_GROUPS.map(g => ({
+    ...g,
+    items: regularItems.filter(it => getItemTags(it).includes(g.tag)).sort((a, b) => getName(a).localeCompare(getName(b))),
+  }));
+  const groupedIds = new Set(groupedItemSets.flatMap(g => g.items.map(it => presetItems.indexOf(it))));
+  const ungroupedItems = regularItems.filter(it => !groupedIds.has(presetItems.indexOf(it))).sort((a, b) => getName(a).localeCompare(getName(b)));
+
+  // Shared row renderer for items (used in both grouped and ungrouped lists)
+  const renderItemRow = (it, idx, { indented } = {}) => {
+    const realIdx = presetItems.indexOf(it);
+    const inv = allItems.find(i => i.id === it.inventoryId);
+    return (
+      <li key={idx} style={{
+        padding: indented ? '5px 12px 5px 24px' : '5px 0',
+        borderBottom: `1px solid ${indented ? '#e5e7eb' : '#f0f0f0'}`,
+        display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap'
       }}>
+        <span style={{ flex: 1 }}>
+          <strong>{(it.quantity || 1) > 1 && `${it.quantity}× `}<ItemName name={it.customName || inv?.name || '(unknown)'} /></strong>
+          {it.customName && inv && <span style={{ color: '#aaa', fontSize: 11 }}> (<ItemName name={inv.name} />)</span>}
+          {it.notes && <span style={{ color: '#888', fontSize: 11, marginLeft: 6, fontStyle: 'italic' }}>— {it.notes}</span>}
+        </span>
+        <button onClick={async () => {
+          await updateItemInPreset(preset.groupId, preset.presetId, realIdx, { quantity: (it.quantity || 1) + 1 });
+          refresh();
+        }} style={rowBtn}>+</button>
+        <button onClick={async () => {
+          const newQty = (it.quantity || 1) - 1;
+          if (newQty < 1) {
+            await removeItemFromPreset(preset.groupId, preset.presetId, realIdx);
+            say('Removed item');
+          } else {
+            await updateItemInPreset(preset.groupId, preset.presetId, realIdx, { quantity: newQty });
+          }
+          refresh();
+        }} style={rowBtn}>−</button>
+        <button onClick={() => {
+          setEditingNote(realIdx);
+          setNoteValue(it.notes || '');
+        }} style={rowBtn}>Note</button>
+        <button onClick={async () => {
+          const newName = prompt('Custom name (blank = use original):', it.customName || '');
+          if (newName === null) return;
+          await updateItemInPreset(preset.groupId, preset.presetId, realIdx, { customName: newName });
+          refresh();
+        }} style={rowBtn}>Rename</button>
+        <button onClick={async () => {
+          await removeItemFromPreset(preset.groupId, preset.presetId, realIdx);
+          say('Removed item');
+          refresh();
+        }} style={{ fontSize: 11, color: 'red' }}>Remove</button>
+      </li>
+    );
+  };
+
+  return (
+    <div style={modalOverlay}>
+      <div style={modalBox}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Setup List: {preset.name}</h3>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -58,7 +133,7 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
 
         {/* Cassettes in preset */}
         <div style={{ marginTop: 15 }}>
-          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
+          <div style={sectionLabel}>
             Cassettes ({cassetteItems.length})
           </div>
           {cassetteItems.length === 0 && (
@@ -86,7 +161,7 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
                     display: 'inline-block'
                   }}>▶</span>
                   <span style={{ flex: 1, fontWeight: 500 }}>
-                    📦 {cassette?.name || '(deleted cassette)'}
+                    <ItemName name={cassette?.name || '(deleted cassette)'} />
                   </span>
                   <span style={{ fontSize: 11, color: '#888' }}>
                     {cassetteInstruments.length} instruments
@@ -110,7 +185,7 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
                         color: '#555', display: 'flex', alignItems: 'center', gap: 6
                       }}>
                         <span style={{ color: '#aaa', fontSize: 10 }}>•</span>
-                        {inst.name}
+                        <ItemName name={inst.name} />
                       </div>
                     ))}
                   </div>
@@ -122,66 +197,55 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
 
         {/* Regular items in preset */}
         <div style={{ marginTop: 15 }}>
-          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
+          <div style={sectionLabel}>
             Items ({regularItems.length})
           </div>
           {regularItems.length === 0 && (
             <p style={{ color: '#aaa', fontSize: 13 }}>No items yet. Add from below.</p>
           )}
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {regularItems.map((it, idx) => {
-              const realIdx = presetItems.indexOf(it);
-              const inv = allItems.find(i => i.id === it.inventoryId);
-              return (
-                <li key={idx} style={{
-                  padding: '5px 0', borderBottom: '1px solid #f0f0f0',
-                  display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap'
+
+          {/* Tag-based collapsible groups */}
+          {groupedItemSets.map(group => group.items.length > 0 && (
+            <div key={group.tag} style={{ marginBottom: 8 }}>
+              <div
+                onClick={() => toggleGroup(group.tag)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 8px', background: '#f9f9f9',
+                  borderRadius: expandedGroups[group.tag] ? '4px 4px 0 0' : 4,
+                  borderLeft: `4px solid ${group.color}`,
+                  cursor: 'pointer', userSelect: 'none'
+                }}
+              >
+                <span style={{
+                  fontSize: 10, transition: 'transform 0.2s',
+                  transform: expandedGroups[group.tag] ? 'rotate(90deg)' : 'rotate(0deg)',
+                  display: 'inline-block'
+                }}>▶</span>
+                <span style={{ flex: 1, fontWeight: 500 }}>
+                  {group.label}
+                </span>
+                <span style={{ fontSize: 11, color: '#888' }}>
+                  {group.items.length} items
+                </span>
+              </div>
+              {expandedGroups[group.tag] && (
+                <div style={{
+                  background: '#f3f4f6', borderRadius: '0 0 4px 4px',
+                  borderLeft: `4px solid ${group.color}`,
+                  padding: '4px 0'
                 }}>
-                  <span style={{ flex: 1 }}>
-                    <strong>{(it.quantity || 1) > 1 && `${it.quantity}× `}{it.customName || inv?.name || '(unknown)'}</strong>
-                    {it.customName && inv && <span style={{ color: '#aaa', fontSize: 11 }}> ({inv.name})</span>}
-                    {it.notes && <span style={{ color: '#888', fontSize: 11, marginLeft: 6, fontStyle: 'italic' }}>— {it.notes}</span>}
-                  </span>
-                  <button onClick={async () => {
-                    await updateItemInPreset(preset.groupId, preset.presetId, realIdx, { quantity: (it.quantity || 1) + 1 });
-                    refresh();
-                  }} style={{ fontSize: 11 }}>+</button>
-                  <button onClick={async () => {
-                    const newQty = (it.quantity || 1) - 1;
-                    if (newQty < 1) {
-                      await removeItemFromPreset(preset.groupId, preset.presetId, realIdx);
-                      say('Removed item');
-                    } else {
-                      await updateItemInPreset(preset.groupId, preset.presetId, realIdx, { quantity: newQty });
-                    }
-                    refresh();
-                  }} style={{ fontSize: 11 }}>−</button>
-                  <button onClick={async () => {
-                    await reorderItemInPreset(preset.groupId, preset.presetId, realIdx, realIdx - 1);
-                    refresh();
-                  }} disabled={realIdx === 0} style={{ fontSize: 11 }}>Up</button>
-                  <button onClick={async () => {
-                    await reorderItemInPreset(preset.groupId, preset.presetId, realIdx, realIdx + 1);
-                    refresh();
-                  }} disabled={realIdx === presetItems.length - 1} style={{ fontSize: 11 }}>Down</button>
-                  <button onClick={() => {
-                    setEditingNote(realIdx);
-                    setNoteValue(it.notes || '');
-                  }} style={{ fontSize: 11 }}>Note</button>
-                  <button onClick={async () => {
-                    const newName = prompt('Custom name (blank = use original):', it.customName || '');
-                    if (newName === null) return;
-                    await updateItemInPreset(preset.groupId, preset.presetId, realIdx, { customName: newName });
-                    refresh();
-                  }} style={{ fontSize: 11 }}>Rename</button>
-                  <button onClick={async () => {
-                    await removeItemFromPreset(preset.groupId, preset.presetId, realIdx);
-                    say('Removed item');
-                    refresh();
-                  }} style={{ fontSize: 11, color: 'red' }}>Remove</button>
-                </li>
-              );
-            })}
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {group.items.map((it, idx) => renderItemRow(it, idx, { indented: true }))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Ungrouped regular items */}
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {ungroupedItems.map((it, idx) => renderItemRow(it, idx))}
           </ul>
         </div>
 
@@ -248,7 +312,7 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
                 } catch (e) {
                   say(e.message);
                 }
-              }} style={{ fontSize: 11 }}>+ Add</button>
+              }} style={rowBtn}>+ Add</button>
             </div>
           ))}
 
@@ -263,7 +327,7 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
                 await addItemToPreset(preset.groupId, preset.presetId, i.id);
                 say(`Added: ${i.name}`);
                 refresh();
-              }} style={{ fontSize: 11 }}>+ Add</button>
+              }} style={rowBtn}>+ Add</button>
             </div>
           ))}
 

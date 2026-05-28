@@ -181,3 +181,8 @@ body {
 .setup-card-add:hover .setup-card-add-icon {
   color: #6b7280;
 }
+
+.setup-grid .setup-card,
+.setup-grid .setup-card-add {
+  min-height: 200px;
+}

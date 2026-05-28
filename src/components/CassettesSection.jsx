@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { sectionStyle } from '../styles';
+import { sectionStyle, cardGrid, flexBetween, chip } from '../styles';
 import { seedCassettes } from '../services/seedService';
 import {
   addCassette, updateCassette, deleteCassette,
@@ -8,10 +8,9 @@ import {
 } from '../services/cassetteService';
 
 export default function CassettesSection({ cassettes, items, say, refresh }) {
-  const [expanded, setExpanded] = useState(null); // cassette id being viewed
+  const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
 
-  // Only show items marked as instruments
   const instruments = items.filter(i => i.type === 'instrument');
 
   const create = async () => {
@@ -23,7 +22,7 @@ export default function CassettesSection({ cassettes, items, say, refresh }) {
 
   return (
     <section style={sectionStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={flexBetween}>
         <h3>Cassettes ({cassettes.length})</h3>
         <div>
           <button onClick={async () => {
@@ -47,7 +46,7 @@ export default function CassettesSection({ cassettes, items, say, refresh }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginTop: 12 }}>
+      <div style={cardGrid}>
         {cassettes.map(c => (
           <CassetteCard
             key={c.id}
@@ -110,9 +109,7 @@ function CassetteCard({ cassette, instruments, isExpanded, onToggleExpand, searc
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
           {contents.length === 0 && <em style={{ color: '#aaa', fontSize: 12 }}>No instruments assigned.</em>}
           {contents.map(inst => (
-            <span key={inst.id} style={{
-              fontSize: 11, padding: '2px 8px', background: '#eee', borderRadius: 12, color: '#333'
-            }}>
+            <span key={inst.id} style={chip}>
               {inst.name}
               {isExpanded && (
                 <button

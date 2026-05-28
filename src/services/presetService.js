@@ -46,10 +46,14 @@ export async function deleteGroup(groupId) {
 }
 
 // --- PRESETS ---
-export async function createPreset(groupId, name, items = []) {
+export async function createPreset(groupId, name, items = [], order = 0) {
   return await addDoc(presetsRef(groupId), {
-    name, items, createdAt: serverTimestamp(),
+    name, items, order, createdAt: serverTimestamp(),
   });
+}
+
+export async function updatePreset(groupId, presetId, updates) {
+  await updateDoc(presetDoc(groupId, presetId), updates);
 }
 
 export async function getPresets(groupId) {
