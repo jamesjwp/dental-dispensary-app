@@ -13,6 +13,7 @@ const TAG_GROUPS = [
   { tag: 'drawer supplies',  label: 'Drawer Supplies', color: '#8b5cf6' },
   { tag: 'burs & polishers', label: 'Burs & Polishers', color: '#f59e0b' },
   { tag: 'x-ray equipment',  label: 'X-ray Equipment', color: '#0ea5e9' },
+  { tag: 'endo files',       label: 'Endo Files',      color: '#ec4899' },
 ];
 
 export default function PresetDetailModal({ preset, allItems, cassettes, presetsByGroup, say, refresh, onClose }) {
@@ -25,12 +26,15 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
 
   const supplies = allItems.filter(i => (i.type || 'supply') === 'supply');
   const instruments = allItems.filter(i => i.type === 'instrument');
+  const burs = allItems.filter(i => i.type === 'burs_polishers');
 
   const filterList = (list) =>
-    list.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+    list.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   const filterCassettes = () =>
-    cassettes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+    cassettes.filter(c => (c.name || '').toLowerCase().includes(search.toLowerCase()))
+             .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   const [expandedCassettes, setExpandedCassettes] = useState({});
   const [expandedGroups, setExpandedGroups] = useState({});
@@ -50,7 +54,10 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
   const getItemTags = (it) => {
     const inv = allItems.find(i => i.id === it.inventoryId);
     if (!inv) return [];
-    return (inv.tags || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const tags = (inv.tags || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const cat = (inv.category || '').trim().toLowerCase();
+    if (cat && !tags.includes(cat)) tags.push(cat);
+    return tags;
   };
 
   // Build grouped + ungrouped item lists
@@ -276,14 +283,14 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
         {/* Add section */}
         <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', marginBottom: 8 }}>Add to preset</div>
         <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-          {['supplies', 'instruments', 'cassettes'].map(t => (
+          {['supplies', 'instruments', 'burs_polishers', 'cassettes'].map(t => (
             <button key={t} onClick={() => { setAddTab(t); setSearch(''); }}
               style={{
                 fontSize: 12, padding: '4px 10px',
                 background: addTab === t ? '#333' : '#eee',
                 color: addTab === t ? 'white' : '#333',
               }}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+              {t === 'burs_polishers' ? 'Burs & Polishers' : t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
@@ -296,6 +303,25 @@ export default function PresetDetailModal({ preset, allItems, cassettes, presets
         />
 
         <div style={{ maxHeight: 220, overflow: 'auto', fontSize: 13 }}>
+          
+          {addTab === 'burs_polishers' && filterList(burs).map(i => (
+            <div key={i.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f0f0f0'
+            }}>
+              <div>
+                <div>{i.name}</div>
+                {i.category && <div style={{ fontSize: 11, color: '#888' }}>{i.category}</div>}
+              </div>
+              <button onClick={async () => {
+                await updatePreset(preset.groupId, preset.presetId, {
+                  items: [...preset.items, { type: 'item', inventoryId: i.id, customName: '', notes: '', quantity: 1 }]
+                });
+                say(`Added ${i.name}`);
+                refresh();
+              }} style={{ padding: '3px 8px', fontSize: 11 }}>+ Add</button>
+            </div>
+          ))}
+
           {addTab === 'cassettes' && filterCassettes().map(c => (
             <div key={c.id} style={{
               display: 'flex', alignItems: 'center', gap: 8,

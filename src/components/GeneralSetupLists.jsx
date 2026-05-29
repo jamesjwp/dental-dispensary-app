@@ -185,21 +185,55 @@ function SetupCard({ preset, groupId, items, cassettes, onOpen }) {
   const supplyCount = regularItems.length;
   const cassetteCount = cassetteItems.length;
 
+  const TAG_GROUPS = [
+    { tag: 'vitals',           label: 'Vitals' },
+    { tag: 'drawer supplies',  label: 'Drawer Supplies' },
+    { tag: 'burs & polishers', label: 'Burs & Polishers' },
+    { tag: 'x-ray equipment',  label: 'X-ray Equipment' },
+    { tag: 'endo files',       label: 'Endo Files' },
+  ];
+
+  const getItemTags = (it) => {
+    const inv = items.find(i => i.id === it.inventoryId);
+    if (!inv) return [];
+    const tags = (inv.tags || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const cat = (inv.category || '').trim().toLowerCase();
+    if (cat && !tags.includes(cat)) tags.push(cat);
+    return tags;
+  };
+
   const chipData = [];
 
   cassetteItems.forEach(ci => {
     const cassette = cassettes.find(c => c.id === ci.cassetteId);
-    if (!cassette) return;
-    (cassette.instrumentIds || []).forEach(instId => {
-      const inst = items.find(i => i.id === instId);
-      if (inst) chipData.push({ label: inst.name, fromCassette: cassette.name });
-    });
+    if (cassette) chipData.push({ label: cassette.name });
   });
 
+  const foundGroups = new Set();
+  const ungroupedItems = [];
+
   regularItems.forEach(it => {
-    const inv = items.find(i => i.id === it.inventoryId);
-    chipData.push({ label: it.customName || inv?.name || '(unknown)' });
+    const tags = getItemTags(it);
+    let matchedGroup = null;
+    for (const tg of TAG_GROUPS) {
+      if (tags.includes(tg.tag)) {
+        matchedGroup = tg;
+        break;
+      }
+    }
+    
+    if (matchedGroup) {
+      if (!foundGroups.has(matchedGroup.tag)) {
+        foundGroups.add(matchedGroup.tag);
+        chipData.push({ label: matchedGroup.label });
+      }
+    } else {
+      const inv = items.find(i => i.id === it.inventoryId);
+      ungroupedItems.push({ label: it.customName || inv?.name || '(unknown)' });
+    }
   });
+
+  ungroupedItems.forEach(u => chipData.push(u));
 
   const MAX_CHIPS = 5;
   const visibleChips = chipData.slice(0, MAX_CHIPS);

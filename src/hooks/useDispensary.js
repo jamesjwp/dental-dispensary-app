@@ -28,7 +28,7 @@ export function useDispensary() {
       // Auto-seed everything on first load
       if (!seeded.current) {
         seeded.current = true;
-        const { seedDrawerSupplies, seedVitals, seedBursAndPolishers, seedCassettes, seedProceduralSetupLists, seedXrayEquipment } = await import('../services/seedService');
+        const { seedDrawerSupplies, seedVitals, seedBursAndPolishers, seedCassettes, seedProceduralSetupLists, seedXrayEquipment, seedEndoFiles } = await import('../services/seedService');
 
         const existingItems = await getAllItems({ includeArchived: true });
         if (existingItems.length === 0) {
@@ -40,6 +40,7 @@ export function useDispensary() {
         await seedVitals();
         await seedBursAndPolishers();
         await seedXrayEquipment();
+        await seedEndoFiles();
 
         const existingCassettes = await getAllCassettes();
         if (existingCassettes.length === 0) {

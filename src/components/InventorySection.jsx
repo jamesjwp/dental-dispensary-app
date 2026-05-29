@@ -11,7 +11,9 @@ export default function InventorySection({ items, say, refresh, showArchived, se
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ category: '', type: '' });
   const [selectedTags, setSelectedTags] = useState([]);
-  const [sort, setSort] = useState({ column: null, direction: 'asc' });
+  const [sort, setSort] = useState({ column: 'name', direction: 'asc' });
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   const startEdit = (item) => {
     setEditing(item.id);
@@ -41,6 +43,7 @@ export default function InventorySection({ items, say, refresh, showArchived, se
     setSelectedTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
+    setPage(1);
   };
 
   // Filter
@@ -55,19 +58,30 @@ export default function InventorySection({ items, say, refresh, showArchived, se
     return true;
   });
 
+  
   // Sort
   if (sort.column) {
     filteredItems = [...filteredItems].sort((a, b) => {
       let av = a[sort.column] ?? '';
       let bv = b[sort.column] ?? '';
-      const an = parseFloat(av), bn = parseFloat(bv);
-      if (!isNaN(an) && !isNaN(bn)) { av = an; bv = bn; }
-      else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+      if (sort.column === 'createdAt') {
+        av = av?.seconds || 0;
+        bv = bv?.seconds || 0;
+      } else {
+        const an = parseFloat(av), bn = parseFloat(bv);
+        if (!isNaN(an) && !isNaN(bn)) { av = an; bv = bn; }
+        else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+      }
       if (av < bv) return sort.direction === 'asc' ? -1 : 1;
       if (av > bv) return sort.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }
+
+
+  
+  const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
+  const paginatedItems = filteredItems.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
   const allTags = [...new Set(items.flatMap(i => parseTags(i.tags)))].sort();
@@ -88,6 +102,7 @@ export default function InventorySection({ items, say, refresh, showArchived, se
     const colors = {
       supply: { bg: '#dbeafe', fg: '#1e40af' },
       instrument: { bg: '#fce7f3', fg: '#9d174d' },
+      burs_polishers: { bg: '#fef3c7', fg: '#92400e' },
     };
     const c = colors[t] || { bg: '#eee', fg: '#333' };
     return (
@@ -98,7 +113,7 @@ export default function InventorySection({ items, say, refresh, showArchived, se
         color: c.fg,
         borderRadius: 3,
         textTransform: 'uppercase',
-      }}>{t}</span>
+      }}>{t === 'burs_polishers' ? 'Burs & Polishers' : t}</span>
     );
   };
 
@@ -137,20 +152,21 @@ export default function InventorySection({ items, say, refresh, showArchived, se
         <input
           placeholder="Search by name..."
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => { setSearch(e.target.value); setPage(1); }}
           style={{ flex: 1, minWidth: 200 }}
         />
-        <select value={filters.category} onChange={e => setFilters({ ...filters, category: e.target.value })}>
+        <select value={filters.category} onChange={e => { setFilters({ ...filters, category: e.target.value }); setPage(1); }}>
           <option value="">All categories</option>
           {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}>
+        <select value={filters.type} onChange={e => { setFilters({ ...filters, type: e.target.value }); setPage(1); }}>
           <option value="">All types</option>
           <option value="supply">Supplies</option>
           <option value="instrument">Instruments</option>
+          <option value="burs_polishers">Burs & Polishers</option>
         </select>
         {(search || filters.category || filters.type || selectedTags.length > 0) && (
-          <button onClick={() => { setSearch(''); setFilters({ category: '', type: '' }); setSelectedTags([]); }}>Clear</button>
+          <button onClick={() => { setSearch(''); setFilters({ category: '', type: '' }); setSelectedTags([]); setPage(1); }}>Clear</button>
         )}
       </div>
 
@@ -178,9 +194,32 @@ export default function InventorySection({ items, say, refresh, showArchived, se
         </div>
       )}
 
-      <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ background: '#f4f4f4', color: '#333' }}>
+      
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 12 }}>Sort by:</span>
+        <select 
+          value={`${sort.column}-${sort.direction}`} 
+          onChange={e => {
+            const [col, dir] = e.target.value.split('-');
+            setSort({ column: col, direction: dir });
+            setPage(1);
+          }}
+          style={{ padding: '2px 4px' }}
+        >
+          <option value="name-asc">Alphabetical (A-Z)</option>
+          <option value="name-desc">Alphabetical (Z-A)</option>
+          <option value="createdAt-asc">Date Added (Oldest)</option>
+          <option value="createdAt-desc">Date Added (Latest)</option>
+        </select>
+      </div>
+
+      <div style={{ maxHeight: '600px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: 4 }}>
+        <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f4f4f4' }}>
+
+          <tr style={{ background: '#f4f4f4', color: '#333', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+            <SortableHeader column="itemId" label="ID" />
             <SortableHeader column="name" label="Name" />
             <SortableHeader column="category" label="Category" />
             <SortableHeader column="type" label="Type" />
@@ -189,14 +228,16 @@ export default function InventorySection({ items, say, refresh, showArchived, se
           </tr>
         </thead>
         <tbody>
-          {filteredItems.map(i => editing === i.id ? (
+          {paginatedItems.map(i => editing === i.id ? (
             <tr key={i.id}>
+              <td style={{ ...cellStyle, color: '#888', fontFamily: 'monospace' }}>{i.itemId || ''}</td>
               <td style={cellStyle}><input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} /></td>
               <td style={cellStyle}><input value={editForm.category || ''} onChange={e => setEditForm({...editForm, category: e.target.value})} /></td>
               <td style={cellStyle}>
                 <select value={editForm.type || 'supply'} onChange={e => setEditForm({ ...editForm, type: e.target.value })}>
                   <option value="supply">supply</option>
                   <option value="instrument">instrument</option>
+                  <option value="burs_polishers">burs & polishers</option>
                 </select>
               </td>
               <td style={cellStyle}>
@@ -209,6 +250,7 @@ export default function InventorySection({ items, say, refresh, showArchived, se
             </tr>
           ) : (
             <tr key={i.id} style={i.archived ? { opacity: 0.5 } : {}}>
+              <td style={{ ...cellStyle, color: '#888', fontFamily: 'monospace' }}>{i.itemId || ''}</td>
               <td style={cellStyle}><ItemName name={i.name || '(no name)'} /></td>
               <td style={cellStyle}>{i.category || ''}</td>
               <td style={cellStyle}>{typeBadge(i.type)}</td>
@@ -230,10 +272,17 @@ export default function InventorySection({ items, say, refresh, showArchived, se
             </tr>
           ))}
           {filteredItems.length === 0 && (
-            <tr><td colSpan="5" style={{ ...cellStyle, textAlign: 'center', color: '#888' }}>No items match</td></tr>
+            <tr><td colSpan="6" style={{ ...cellStyle, textAlign: 'center', color: '#888' }}>No items match</td></tr>
           )}
         </tbody>
       </table>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 15 }}>
+        <button disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+        <span style={{ fontSize: 13 }}>Page {page} of {Math.max(1, totalPages)}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+      </div>
     </section>
   );
 }

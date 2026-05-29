@@ -9,8 +9,20 @@ const COLLECTION = 'inventory';
 
 // CREATE a single item
 export async function addItem(item) {
+  const existingSnap = await getDocs(collection(db, COLLECTION));
+  let maxId = 999;
+  existingSnap.docs.forEach(d => {
+    const data = d.data();
+    if (data.itemId) {
+      const num = parseInt(data.itemId, 10);
+      if (!isNaN(num) && num > maxId) maxId = num;
+    }
+  });
+  const newItemId = String(maxId + 1);
+
   return await addDoc(collection(db, COLLECTION), {
     ...item,
+    itemId: newItemId,
     createdAt: serverTimestamp(),
   });
 }
@@ -53,8 +65,19 @@ export async function importCSV(file) {
         try {
           const existingSnap = await getDocs(collection(db, COLLECTION));
           const existingByName = new Map();
+          const existingByItemId = new Map();
+          let maxId = 999;
+
           existingSnap.docs.forEach(d => {
-            const name = (d.data().name || '').toLowerCase().trim();
+            const data = d.data();
+            const name = (data.name || '').toLowerCase().trim();
+            const itemId = data.itemId;
+            
+            if (itemId) {
+              existingByItemId.set(String(itemId), d.id);
+              const num = parseInt(itemId, 10);
+              if (!isNaN(num) && num > maxId) maxId = num;
+            }
             if (name) existingByName.set(name, d.id);
           });
 
@@ -64,18 +87,28 @@ export async function importCSV(file) {
           const batches = [];
           let batch = writeBatch(db);
           let opsInBatch = 0;
+          let nextId = maxId + 1;
 
           for (const item of items) {
-            const key = (item.name || '').toLowerCase().trim();
-            if (!key) continue;
+            const keyName = (item.name || '').toLowerCase().trim();
+            const itemKeyId = item.itemId ? String(item.itemId).trim() : null;
+            if (!keyName && !itemKeyId) continue;
 
-            if (existingByName.has(key)) {
-              const ref = doc(db, COLLECTION, existingByName.get(key));
+            let matchedDocId = null;
+            if (itemKeyId && existingByItemId.has(itemKeyId)) {
+               matchedDocId = existingByItemId.get(itemKeyId);
+            } else if (keyName && existingByName.has(keyName)) {
+               matchedDocId = existingByName.get(keyName);
+            }
+
+            if (matchedDocId) {
+              const ref = doc(db, COLLECTION, matchedDocId);
               batch.update(ref, { ...item });
               updated++;
             } else {
               const ref = doc(collection(db, COLLECTION));
-              batch.set(ref, { ...item, createdAt: serverTimestamp() });
+              const newItemId = itemKeyId || String(nextId++);
+              batch.set(ref, { ...item, itemId: newItemId, createdAt: serverTimestamp() });
               added++;
             }
             opsInBatch++;
